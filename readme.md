@@ -22,8 +22,8 @@ to your Arduino board. Follow the guide
 [here](https://www.arduino.cc/en/Guide/HomePage) for more details.
 
 An Arduino running the provided sketch (or any other valid sketch that
-communicates in the expected manner with the listener) is required to test the
-web interface.
+communicates in the expected manner with the listener) is **NOT** required to test the
+web interface. A dummy listener class is provided to simulate the reception of data.
 
 ### The web interface
 
