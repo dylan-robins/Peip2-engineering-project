@@ -11,11 +11,15 @@ from time import time, sleep
 # import arduino listener classes
 from listener import Listener, Dummy_Listener
 
-# initialize logger
-logging.basicConfig(stream=stderr, level=logging.INFO)
+# initialize loggers
+logging.basicConfig(stream=stderr, level=logging.DEBUG) # Our log
+logging.getLogger("werkzeug").setLevel(logging.ERROR)  # Flask log
+logging.getLogger('socketio').setLevel(logging.ERROR)  # socketio logs
+logging.getLogger('engineio').setLevel(logging.ERROR)
 
 # initialize Flask
 app = Flask(__name__)
+app.logger.disable = True
 socketio = SocketIO(app)
 
 data_transfer_thread = Thread()
@@ -43,9 +47,9 @@ class Data_transferer(Thread):
                 logging.info('Client disconnected: transfer stopped.')
             else:
                 # get data from the queue and send it
-                if not q.empty():
+                while not q.empty():
                     msg = self.queue.get()
-                    socketio.emit("point", msg, namespace=self.namespace)
+                    socketio.emit("point", msg, broadcast=True, namespace=self.namespace)
                 sleep(self.delay)
 
     def run(self):

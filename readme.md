@@ -1,9 +1,11 @@
 # Arduino sensor web interface
 
-## Current bugs
+## TODO list
 
-+ Client only receives one point
-+ Server shutdown is sometimes messy
++ Set a limit to how many points are displayed on the x-axis of each graph  
++ Save points to SQL database on server  
++ On client connect, send last 10 (?) minutes of data.  
++ Add buttons to switch graphs from realtime to historical (last hour, last day, last week, last month...)  
 
 ## Installing
 
@@ -27,28 +29,24 @@ web interface. A dummy listener class is provided to simulate the reception of d
 
 ### The web interface
 
-You’ll need to generate and activate a python3 virtual environment:
-
+You’ll need to generate and activate a python3 virtual environment:  
 ```
 $ python3 -m venv ./venv
 $ source venv/bin/activate
 ```
 
 You’ll know that the virtual environment is active when your prompt is prefixed
-by `(venv)`. To exit the virtual environment simply type
-
+by `(venv)`. To exit the virtual environment simply type  
 ```
 (venv) $ deactivate
 ```
 
-Install the required dependencies within your virtual environment:
-
+Install the required dependencies within your virtual environment:  
 ```
 (venv) $ pip install -r requirements.txt
 ```
 
-Now you can finally launch the webserver:
-
+Now you can finally launch the webserver:  
 ```
 (venv) $ ./webserver.py
 ```
@@ -63,9 +61,8 @@ browser.
 The protocol used for this package is a simple handshake-based json interface.
 The Arduino probes for a listener by sending `0x41` bytes at regular intervals,
 waiting to receive the same byte in response. Once this handshake established,
-the Arduino waits to receive a `0x42` byte from the listener to resond with a
-line of JSON, formatted as follows:
-
+the Arduino periodically sends sensor data formatted as a line of JSON, as
+follows:  
 ```
 [{"stream":"aStreamName","value":42},{"stream":"anotherStreamName","value":420}]
 ```
@@ -77,7 +74,7 @@ which makes it return to the probing state.
 
 These bytes can be easily changed: in `listener.py` they are defined as default
 values for the Listener class. You can simply create your instance with
-different values:
+different values:  
 ```python
 class listener (threading.Thread):
     def __init__(
@@ -92,7 +89,7 @@ class listener (threading.Thread):
     ):
 ```
 Similarly, in the Arduino sketch these constants are defined as macros at the
-top of the file:
+top of the file:  
 ```c
 #define HANDSHAKE_BYTE      0x41
 #define REQUEST_BYTE        0x42

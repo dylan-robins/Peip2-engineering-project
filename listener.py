@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import logging
-from math import floor, sin
+from math import floor, sin, cos
 from time import time, sleep
 from json import loads as json_loads
 from sys import argv, stderr
@@ -55,7 +55,11 @@ class Listener(Thread):
                 # add each new point to the queue
                 for point in new_points:
                     logging.debug("Point added to queue")
-                    self.queue.put({"timestamp": floor(time()), "value": point["value"]})
+                    self.queue.put({
+                        "stream": point["stream"],
+                        "timestamp": floor(time()),
+                        "value": point["value"]
+                    })
 
             # wait before requesting another mesurement
             sleep(self.interval)
@@ -81,8 +85,9 @@ class Dummy_Listener(Thread):
         i = 0
         # MAIN LOOP: generate dummy points
         while not self.stop_flag:
-            self.queue.put({"timestamp": floor(time()), "value": sin(i)})
-            i += 0.01
+            self.queue.put({"stream": "sine wave", "timestamp": floor(time()), "value": sin(i)})
+            self.queue.put({"stream": "cosine wave", "timestamp": floor(time()), "value": cos(i)})
+            i += 0.6
             sleep(1)
 
     def stop(self):
