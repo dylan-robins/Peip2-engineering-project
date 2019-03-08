@@ -18,9 +18,8 @@ function random_colour() {
 function create_chart(chart_array, chart_name) {
     // Add HTML element
     $("main").append(`
-        <div class="graph">
-            <h2>${chart_name}</h2>
-            <canvas id="${chart_name}" width="400" height="200"></canvas>
+        <div class="chart-container graph">
+            <canvas id="${chart_name}"></canvas>
         </div>
     `);
 
@@ -49,12 +48,6 @@ function create_chart(chart_array, chart_name) {
 						scaleLabel: {
 							display: true,
 							labelString: 'Date'
-						},
-						ticks: {
-							major: {
-								fontStyle: 'bold',
-								fontColor: '#000000'
-							}
 						}
 					}],
 					yAxes: [{
@@ -85,23 +78,26 @@ socket.on('point', function(msg) {
         create_chart(charts, msg.stream);
     }
 
+    // find corresponding chart in array
     let chart = null;
     for (let elem of charts) {
         if (elem.name == msg.stream) {
             chart = elem.object;
         }
     }
-
+    // add point to chart
     chart.data.datasets[0].data.push({
         x: Date(msg.timestamp * 1000),
         y: msg.value
     });
 
+    // limit chart length
+    if (chart.data.datasets[0].data.length > 50) {
+        chart.data.datasets[0].data.shift();
+    }
+
     chart.update();
 
-    // if (data[0].values.length > 400) {
-    //     data[0].values.shift();
-    // }
 });
 
 // Send message every 10s to keep the connection alive

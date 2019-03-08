@@ -1,7 +1,9 @@
+@import url('https://fonts.googleapis.com/css?family=Open+Sans');
+
 body {
     margin: 0;
     background-color: #424242;
-    font-family: "Open Sans";
+    font-family: 'Open Sans', sans-serif;;
     color: #fff;
 }
 
@@ -15,8 +17,13 @@ header {
 
 main {
     max-width: 1500px;
+    width: 100vw;
     margin-left: auto;
     margin-right: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
 }
 
 h1 {
@@ -31,12 +38,19 @@ h2 {
 }
 
 .graph {
-    width: 40em;
+    position: relative;
     margin: 1em;
     padding: 1em;
+    width: 100em;
+    max-width: 680px;
     box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
     color: rgba(0,0,0, 0.87);
     background-color: #f4f4f4;
+}
+@media only screen and (max-width : 100em) {
+    .graph {
+        width: 100vw
+    }
 }
 
 button {
