@@ -99,6 +99,7 @@ top of the file:
 ## Authors
 
 * Dylan Robins - https://github.com/dylan-robins
+* Joris Placette - https://github.com/JorisPLA7
 
 ## License
 
