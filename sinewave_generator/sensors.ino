@@ -44,7 +44,7 @@ void loop() {
 }
 
 float map_humidite(int humidite, int temp) {
-  float r_cap = ((float)humidite/1023*5)*56000/(5-((float)humidite/1023*5));
+  float r_cap = ((float)humidite*5/1023)*1200000/(5-((float)humidite*5/1023));
   float res;
   if (temp < 5) {
     res = 155-7.87*log(r_cap);
