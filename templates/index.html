@@ -7,23 +7,25 @@
     </head>
 
     <body>
-        <header>
-            <h1>Live graph visualizer</h1>
-        </header>
-
-        <main>
-        </main>
         <!-- jQuery -->
         <script src="https://code.jquery.com/jquery-3.3.1.min.js"
                 integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
                 crossorigin="anonymous">
         </script>
         <!-- Chart.js -->
-        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.bundle.min.js"></script>
-        <!-- Socket.io -->
-        <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.5/socket.io.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.bundle.js"></script>
         <!-- My code -->
         <script type="text/javascript" src="static/color_palette.js"></script>
         <script type="text/javascript" src="static/script.js"></script>
+        <header>
+            <h1>Live graph visualizer</h1>
+            <nav>
+                <a href="#" onclick="request_data('realtime')">Real Time</a>
+                <a href="#" onclick="request_data('day')">Past Day</a>
+            </nav>
+        </header>
+
+        <main>
+        </main>
     </body>
 </html>

@@ -1,99 +1,85 @@
-#!/usr/bin/env python
+#!venv/bin/python
 import logging
 from sys import stderr, exit
-from flask_socketio import SocketIO, emit
-from flask import Flask, render_template, url_for, copy_current_request_context
+from flask import Flask, render_template, url_for, copy_current_request_context, Response, request, jsonify
 from serial import Serial
 from queue import Queue
-from threading import Thread, Event
 from time import time, sleep
+from datetime import datetime, timedelta
+import sqlite3
+import json
 
 # import arduino listener classes
 from listener import Listener, Dummy_Listener
 
 # initialize loggers
-logging.basicConfig(stream=stderr, level=logging.DEBUG) # Our log
+logging.basicConfig(stream=stderr, level=logging.INFO) # Our log
 logging.getLogger("werkzeug").setLevel(logging.ERROR)  # Flask log
-logging.getLogger('socketio').setLevel(logging.ERROR)  # socketio logs
-logging.getLogger('engineio').setLevel(logging.ERROR)
 
-# initialize Flask
+    # initialize Flask
 app = Flask(__name__)
+
 app.logger.disable = True
-socketio = SocketIO(app)
-
-data_transfer_thread = Thread()
-# make a stucture to keep track of if there's a client connected
-thread_stop_event = {"timestamp": 0, "event":Event()}
-
 # Create a queue for sharing data between listener and server
 q = Queue()
 
-class Data_transferer(Thread):
-    def __init__(self, q, namespace):
-        self.delay = 1
-        self.queue = q
-        self.namespace = namespace
-        super(Data_transferer, self).__init__()
-
-    def main_loop(self):
-        logging.info("Sending data to clients...")
-        # continue sending data until stop event is set
-        while not thread_stop_event["event"].isSet():
-            if (time() - thread_stop_event["timestamp"]) > 30:
-                # if client hasn't sent a keepalive in the last 30s, consider
-                # that client is disconnected and close the thread
-                thread_stop_event["event"].set()
-                logging.info('Client disconnected: transfer stopped.')
-            else:
-                # get data from the queue and send it
-                while not q.empty():
-                    msg = self.queue.get()
-                    socketio.emit("point", msg, broadcast=True, namespace=self.namespace)
-                sleep(self.delay)
-
-    def run(self):
-        self.main_loop()
-
+# initialize listener
+# serial_listener = Listener(q, "/dev/ttyACM0", 9600)
+serial_listener = Dummy_Listener(q)
 
 @app.route('/')
 def index():
-    #only by sending this page first will the client be connected to the socketio instance
     return render_template('index.html')
 
-@socketio.on('connect', namespace='/data')
-def connect():
-    # get access to thread used for transferring data to client
-    global data_transfer_thread
-    # get access to global queue
-    global q
+@app.route('/stream', methods=['GET', 'POST'])
+def stream():
+    def eventStream():
+        '''
+        Fetches all new points from queue and pushes them to client via an event stream
+        '''
+        while True:
+            logging.debug("Building response...")
+            # get new points
+            to_send = []
+            while not q.empty():
+                logging.debug("Adding point to queue...")
+                point = q.get()
+                to_send.append(point)
+            # build data string
+            if len(to_send) > 0:
+                logging.debug(str(to_send))
+                yield 'data: {}\n\n'.format(json.dumps(to_send))
+            sleep(1)
 
-    # reset stop event
-    global thread_stop_event
-    thread_stop_event["timestamp"] = time()
-    thread_stop_event["event"].clear()
-
-    logging.info('Client connected')
-
-    #Start the data transfer thread
-    if not data_transfer_thread.isAlive():
-        logging.debug("Starting Thread")
-        data_transfer_thread = Data_transferer(q, namespace='/data')
-        data_transfer_thread.start()
-
-@socketio.on('keepalive', namespace='/data')
-def keepalive():
-    thread_stop_event["timestamp"] = time()
+    if request.method == "POST":
+        serial_listener.set_realtime(False)
+        name = request.form["name"]
+        # connect to database
+        db = sqlite3.connect('file:db.sqlite3?mode=ro', uri=True, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+        dbcursor = db.cursor()
+        if name == "day":
+            logging.debug("Sending points from last day...")
+            yesterday = datetime.now()-timedelta(days=1)
+            requested = [
+                {
+                    "timestamp" : point[0],
+                    "stream" : point[1],
+                    "value" : point[2]
+                } for point in dbcursor.execute('''SELECT datetime(date), sensor, value FROM readings WHERE date > datetime(?)''', (yesterday,))
+            ]
+        db.close()
+        return jsonify(requested)
+    else:
+        # get access to global queue
+        global q
+        serial_listener.set_realtime(True)
+        return Response(eventStream(), mimetype="text/event-stream")
 
 
 if __name__ == '__main__':
-    # initialize listener
-    # serial_listener = Listener(q, "/dev/ttyACM0", 9600)
-    serial_listener = Dummy_Listener(q)
     serial_listener.start()
 
-    socketio.run(app)
+    app.run()
 
     logging.info("Shutting down...")
     serial_listener.stop()
-    thread_stop_event["event"].set()

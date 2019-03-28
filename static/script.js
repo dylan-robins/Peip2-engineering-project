@@ -15,93 +15,119 @@ function random_colour() {
     }
 }
 
-function create_chart(chart_array, chart_name) {
-    // Add HTML element
-    $("main").append(`
-        <div class="chart-container graph">
-            <canvas id="${chart_name}"></canvas>
-        </div>
-    `);
-
-    // Choose colours for chart
-    const colour = random_colour();
-    // Add chart to array
-    charts.push({
-        name: chart_name,
-        object: new Chart(chart_name, {
-            type: 'line',
-            data: {
-                datasets: [{
-                    label: chart_name,
-                    backgroundColor: colour.fg,
-					borderColor: colour.bg,
-					fill: false,
-					data: []
-                }]
-            },
-            options: {
-				responsive: true,
-				scales: {
-					xAxes: [{
-						type: 'time',
-						display: true,
-						scaleLabel: {
-							display: true,
-							labelString: 'Date'
-						}
-					}],
-					yAxes: [{
-						display: true,
-						scaleLabel: {
-							display: true,
-							labelString: 'value'
-						}
-                    }]
-                }
+function add_points_to_charts(points) {
+    for (let point of points) {
+        // Check if new data is from a know stream
+        // if not, add new stream to page
+        if (!obj_in_array(charts, point.stream)){
+            // Add HTML element
+            $("main").append(`
+                <div class="chart-container graph">
+                    <canvas id="${point.stream}"></canvas>
+                </div>
+            `);
+            // Choose colours for chart
+            const colour = random_colour();
+            // Add chart to array
+            charts.push({
+                name: point.stream,
+                object: new Chart(point.stream, {
+                    type: 'line',
+                    data: {
+                        datasets: [{
+                            label: point.stream,
+                            backgroundColor: colour.fg,
+                            borderColor: colour.bg,
+                            fill: false,
+                            data: []
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            xAxes: [{
+                                type: 'time',
+                                display: true,
+                                scaleLabel: {
+                                    display: true,
+                                    labelString: 'Date'
+                                }
+                            }],
+                            yAxes: [{
+                                display: true,
+                                scaleLabel: {
+                                    display: true,
+                                    labelString: 'value'
+                                }
+                            }]
+                        }
+                    }
+                })
+            })
+        }
+        // find corresponding chart in array
+        let chart = null;
+        for (let elem of charts) {
+            if (elem.name == point.stream) {
+                chart = elem.object;
             }
-        })
-    })
+        }
+        // add point to chart
+        chart.data.datasets[0].data.push({
+            x: new Date(point.timestamp),
+            y: point.value
+        });
+        // limit chart length
+        if (chart.data.datasets[0].data.length > 50) {
+            chart.data.datasets[0].data.shift();
+        }
+        chart.update();
+        
+    }
 }
+
+function request_data(period) {
+    console.log(period);
+
+    if (period == "realtime") {
+        // clear existing charts
+        charts = []
+        $("main").html("");
+        // Connect to the server
+        eventSource = new EventSource("/stream");
+        // Register event handler for server sent data.
+        eventSource.onmessage = function(e) {
+            msg = JSON.parse(e.data.replace(/'/g, '"'))
+            add_points_to_charts(msg);
+        }
+
+    } else if (period == "day") {
+        let req = new XMLHttpRequest();
+        req.onreadystatechange = function() {
+            if(this.readyState == 4 && this.status == 200) {
+                // close realtime data stream
+                eventSource.close();
+                // Get new points
+                points = JSON.parse(this.responseText);
+                // clear existing charts
+                charts = []
+                $("main").html("");
+                // Draw data
+                add_points_to_charts(points);
+            } else if (this.readyState == 4) {
+                console.log("Unable to fetch data... Error ", this.status);
+            }
+        }
+        req.open('POST', '/stream', true);
+        req.setRequestHeader('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+        req.send("name=" + period);
+    }
+}
+
 
 // Array of charts
 let charts = [];
 
 // Connect to the server
-var socket = io.connect('http://' + document.domain + ':' + location.port + '/data');
-
-// Register event handler for server sent data.
-socket.on('point', function(msg) {
-    // console.log(msg)
-    // Check if new data is from a know stream
-    if (!obj_in_array(charts, msg.stream)){
-        // New stream: create a new chart
-        create_chart(charts, msg.stream);
-    }
-
-    // find corresponding chart in array
-    let chart = null;
-    for (let elem of charts) {
-        if (elem.name == msg.stream) {
-            chart = elem.object;
-        }
-    }
-    // add point to chart
-    chart.data.datasets[0].data.push({
-        x: Date(msg.timestamp * 1000),
-        y: msg.value
-    });
-
-    // limit chart length
-    if (chart.data.datasets[0].data.length > 50) {
-        chart.data.datasets[0].data.shift();
-    }
-
-    chart.update();
-
-});
-
-// Send message every 10s to keep the connection alive
-// one day, maybe, browsers will close down sockets on exit...
-setInterval(function(){
-    socket.emit('keepalive');
-}, 10000);
+let eventSource;
+request_data("realtime");

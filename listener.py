@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 import logging
 from math import floor, sin, cos
-from time import time, sleep
+from time import sleep
+from datetime import datetime, timedelta
 from json import loads as json_loads
 from sys import argv, stderr
 from threading import Thread
 from queue import Queue
 from serial import Serial
-
+import sqlite3
 
 class Listener(Thread):
     def __init__(
@@ -15,22 +16,32 @@ class Listener(Thread):
         queue,
         port,
         baudrate,
+        db_name,
         handshake_byte=b"\x41",
         resquest_byte=b"\x42",
         close_byte=b"\x00",
-        interval=1,
+        interval=1, 
+        realtime=False
     ):
         Thread.__init__(self)
         self.queue = queue
         self.device = Serial(port=port, baudrate=baudrate)
         self.handshake_byte = handshake_byte
-        self.resquest_byte = resquest_byte
         self.close_byte = close_byte
         self.interval = interval  # seconds between mesurement
         self.stop_flag = False
+        self.realtime = realtime
+        self.db_name = db_name
 
     def run(self):
         logging.info("Listener started")
+
+        # Connect to the SQLite database and initialize (if necessary) a table
+        db = sqlite3.connect(self.db_name)
+        dbcursor = db.cursor()
+        dbcursor.execute('''
+            CREATE TABLE IF NOT EXISTS readings(date TIMESTAMP, sensor TEXT, value REAL)
+        ''')
 
         # wait for Arduino to be ready
         raw_byte = self.device.read()
@@ -52,17 +63,25 @@ class Listener(Thread):
                 # Convert the line to an array
                 new_points = json_loads(raw_line)
 
-                # add each new point to the queue
+                # add each new point to the sql db and the queue
                 for point in new_points:
-                    logging.debug("Point added to queue")
-                    self.queue.put({
-                        "stream": point["stream"],
-                        "timestamp": floor(time()),
-                        "value": point["value"]
-                    })
+                    dbcursor.execute('''
+                        INSERT INTO readings(date, sensor, value) VALUES(?,?,?)
+                    ''', (datetime.now().isoformat(), point["stream"], point["value"]))
+                    db.commit()
 
+                    if self.realtime:
+                        # add each new point to the queue
+                        logging.debug("Point added to queue")
+                        self.queue.put({
+                            "stream": point["stream"],
+                            "timestamp": datetime.now().isoformat(),
+                            "value": point["value"]
+                        })
+        
             # wait before requesting another mesurement
             sleep(self.interval)
+        self.db.close()
 
     def stop(self):
         logging.info("Listener stopping")
@@ -71,28 +90,63 @@ class Listener(Thread):
         self.device.flush()
         self.device.close()
 
+    def set_realtime(self, rt):
+        self.realtime = rt
+        logging.info("Toggling realtime to " + str(self.realtime))
+
 
 class Dummy_Listener(Thread):
-    def __init__(self, queue, interval=1):
+    def __init__(self, queue, db_name="db.sqlite3", interval=1, realtime=False):
         Thread.__init__(self)
         self.queue = queue
+        self.db_name = db_name
         self.interval = interval  # seconds between mesurement
         self.stop_flag = False
+        self.realtime = realtime
 
     def run(self):
         logging.info("Dummy listener started")
 
+        # Connect to the SQLite database and initialize (if necessary) a table
+        db = sqlite3.connect(self.db_name)
+        dbcursor = db.cursor()
+        dbcursor.execute('''
+            CREATE TABLE IF NOT EXISTS readings(date TIMESTAMP, sensor TEXT, value REAL)
+        ''')
+
         i = 0
         # MAIN LOOP: generate dummy points
         while not self.stop_flag:
-            self.queue.put({"stream": "sine wave", "timestamp": floor(time()), "value": sin(i)})
-            self.queue.put({"stream": "cosine wave", "timestamp": floor(time()), "value": cos(i)})
+            # add each new point to the sql db and the queue
+            new_points = [
+                {"stream": "sine wave", "timestamp": datetime.now().isoformat(), "value": sin(i)},
+                {"stream": "cosine wave", "timestamp": datetime.now().isoformat(), "value": cos(i)}
+            ]
+            for point in new_points:
+                dbcursor.execute('''
+                    INSERT INTO readings(date, sensor, value) VALUES(?,?,?)
+                ''', (datetime.now().isoformat(), point["stream"], point["value"]))
+                db.commit()
+
+                if self.realtime:
+                    # add each new point to the queue
+                    logging.debug("Point added to queue")
+                    self.queue.put({
+                        "stream": point["stream"],
+                        "timestamp": point["timestamp"],
+                        "value": point["value"]
+                    })
             i += 0.6
-            sleep(1)
+            sleep(self.interval)
+        db.close()
 
     def stop(self):
         logging.info("Listener stopping")
         self.stop_flag = True
+    
+    def set_realtime(self, rt):
+        self.realtime = rt
+        logging.info("Toggling realtime to " + str(self.realtime))
 
 
 def test_listener(device="/dev/ttyACM0", baudrate=9600):
@@ -113,7 +167,7 @@ def test_listener(device="/dev/ttyACM0", baudrate=9600):
             while not q.empty():
                 print(q.get())
             # wait a bit
-            sleep(2)
+            sleep(1)
             i += 1
         # close the device and finish the process
         main_listener.stop()
@@ -139,7 +193,7 @@ def test_dummy_listener():
             while not q.empty():
                 print(q.get())
             # wait a bit
-            sleep(2)
+            sleep(1)
             i += 1
         # close the device and finish the process
         main_listener.stop()

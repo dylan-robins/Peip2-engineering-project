@@ -2,10 +2,12 @@
 
 ## TODO list
 
-+ Set a limit to how many points are displayed on the x-axis of each graph  
-+ Save points to SQL database on server  
++ **Update requirements.txt**
++ **Update descriptoion of communication protocol**
++ Change XHRs from POST to GET (?)
 + On client connect, send last 10 (?) minutes of data.  
 + Add buttons to switch graphs from realtime to historical (last hour, last day, last week, last month...)  
++ Send scales along with points
 
 ## Installing
 
@@ -46,12 +48,14 @@ Install the required dependencies within your virtual environment:
 (venv) $ pip install -r requirements.txt
 ```
 
+**requirements.txt is out of date!**
+
 Now you can finally launch the webserver:  
 ```
 (venv) $ ./webserver.py
 ```
 
-To view the webpage in your browser, open http://0.0.0.0/5000 in your web
+To view the webpage in your browser, open http://0.0.0.0:5000 in your web
 browser.
 
 ## Usage
@@ -83,7 +87,6 @@ class listener (threading.Thread):
         port,
         baudrate,
         handshake_byte=b"\x41",
-        resquest_byte=b"\x42",
         close_byte=b"\x00",
         interval=1,
     ):
@@ -92,9 +95,22 @@ Similarly, in the Arduino sketch these constants are defined as macros at the
 top of the file:  
 ```c
 #define HANDSHAKE_BYTE      0x41
-#define REQUEST_BYTE        0x42
 #define CLOSE_BYTE          0x00
 ```
+
+### Web server / client communication
+
+The client can request intervals of data via XHR POST requests or open an event
+stream with the server. In the case of an XHR, the server will respond with a
+JSON array that contains all the requested points, obtained from the SQLite
+database. In the case of an event stream, the server periodically sends the
+client JSON arrays containing the points received since the last response.
+These points are obtained from the global queue.
+
+New points aren't always added to the queue: on creation of an event stream,
+we set the listener's `realtime` property to `True`, at witch point it starts
+adding new points to the queue as well as the SQLite database. This property is
+set back to `False` on reception of an XHR requesting historical points.
 
 ## Authors
 
