@@ -15,7 +15,7 @@ function random_colour() {
     }
 }
 
-function add_points_to_charts(points) {
+function add_points_to_charts(points, period) {
     for (let point of points) {
         // Check if new data is from a know stream
         // if not, add new stream to page
@@ -101,7 +101,7 @@ function request_data(period) {
             add_points_to_charts(msg);
         }
 
-    } else if (period == "day") {
+    } else {
         let req = new XMLHttpRequest();
         req.onreadystatechange = function() {
             if(this.readyState == 4 && this.status == 200) {
@@ -110,10 +110,10 @@ function request_data(period) {
                 // Get new points
                 points = JSON.parse(this.responseText);
                 // clear existing charts
-                charts = []
                 $("main").html("");
+                charts = []
                 // Draw data
-                add_points_to_charts(points);
+                add_points_to_charts(points, period);
             } else if (this.readyState == 4) {
                 console.log("Unable to fetch data... Error ", this.status);
             }

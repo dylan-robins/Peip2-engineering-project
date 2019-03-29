@@ -18,7 +18,6 @@ class Listener(Thread):
         baudrate,
         db_name,
         handshake_byte=b"\x41",
-        resquest_byte=b"\x42",
         close_byte=b"\x00",
         interval=1, 
         realtime=False
@@ -96,13 +95,13 @@ class Listener(Thread):
 
 
 class Dummy_Listener(Thread):
-    def __init__(self, queue, db_name="db.sqlite3", interval=1, realtime=False):
+    def __init__(self, queue, db_name="db.sqlite3", interval=1):
         Thread.__init__(self)
         self.queue = queue
         self.db_name = db_name
         self.interval = interval  # seconds between mesurement
         self.stop_flag = False
-        self.realtime = realtime
+        self.realtime = False
 
     def run(self):
         logging.info("Dummy listener started")

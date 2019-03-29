@@ -2,11 +2,6 @@
 
 ## TODO list
 
-+ **Update requirements.txt**
-+ **Update descriptoion of communication protocol**
-+ Change XHRs from POST to GET (?)
-+ On client connect, send last 10 (?) minutes of data.  
-+ Add buttons to switch graphs from realtime to historical (last hour, last day, last week, last month...)  
 + Send scales along with points
 
 ## Installing
@@ -48,8 +43,6 @@ Install the required dependencies within your virtual environment:
 (venv) $ pip install -r requirements.txt
 ```
 
-**requirements.txt is out of date!**
-
 Now you can finally launch the webserver:  
 ```
 (venv) $ ./webserver.py
@@ -68,7 +61,10 @@ waiting to receive the same byte in response. Once this handshake established,
 the Arduino periodically sends sensor data formatted as a line of JSON, as
 follows:  
 ```
-[{"stream":"aStreamName","value":42},{"stream":"anotherStreamName","value":420}]
+[
+    {"stream":"aStreamName","value":42},
+    {"stream":"anotherStreamName","value":420}
+]
 ```
 
 Each line is an array of points, and each point is an object containing a stream
@@ -80,15 +76,17 @@ These bytes can be easily changed: in `listener.py` they are defined as default
 values for the Listener class. You can simply create your instance with
 different values:  
 ```python
-class listener (threading.Thread):
+class Listener(Thread):
     def __init__(
         self,
         queue,
         port,
         baudrate,
+        db_name,
         handshake_byte=b"\x41",
         close_byte=b"\x00",
-        interval=1,
+        interval=1, 
+        realtime=False
     ):
 ```
 Similarly, in the Arduino sketch these constants are defined as macros at the
@@ -102,10 +100,10 @@ top of the file:
 
 The client can request intervals of data via XHR POST requests or open an event
 stream with the server. In the case of an XHR, the server will respond with a
-JSON array that contains all the requested points, obtained from the SQLite
-database. In the case of an event stream, the server periodically sends the
-client JSON arrays containing the points received since the last response.
-These points are obtained from the global queue.
+JSON array that contains all the requested points obtained from the SQLite
+database. In the case of an event stream, the server sends the client JSON
+arrays every time it receives a new point from the listener via the global
+queue.
 
 New points aren't always added to the queue: on creation of an event stream,
 we set the listener's `realtime` property to `True`, at witch point it starts
