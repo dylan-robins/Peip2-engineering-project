@@ -14,8 +14,8 @@
 #define GND_HUMID_PIN_IN 4
 // Ground humidity sensor sensor need two output pins
 // (+5V flips between them to avoid soil electrolysis)
-#define GND_HUMID_PIN_OUT1 6
 #define GND_HUMID_PIN_OUT2 5
+#define GND_HUMID_PIN_OUT1 6
 #define FLIPTIMER 200 // How long to wait befor flipping voltage on pins
 
 //ANALOG READ VALUES
