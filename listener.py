@@ -19,8 +19,7 @@ class Listener(Thread):
         db_name,
         handshake_byte=b"\x41",
         close_byte=b"\x00",
-        interval=1, 
-        realtime=False
+        interval=1
     ):
         Thread.__init__(self)
         self.queue = queue
@@ -29,7 +28,7 @@ class Listener(Thread):
         self.close_byte = close_byte
         self.interval = interval  # seconds between mesurement
         self.stop_flag = False
-        self.realtime = realtime
+        self.realtime = False
         self.db_name = db_name
 
     def run(self):
@@ -38,8 +37,9 @@ class Listener(Thread):
         # Connect to the SQLite database and initialize (if necessary) a table
         db = sqlite3.connect(self.db_name)
         dbcursor = db.cursor()
-        dbcursor.execute('''
-            CREATE TABLE IF NOT EXISTS readings(date TIMESTAMP, sensor TEXT, value REAL)
+        dbcursor.executescript('''
+            CREATE TABLE IF NOT EXISTS readings(date TIMESTAMP, sensor TEXT, value REAL);
+            CREATE TABLE IF NOT EXISTS scales(sensor TEXT, min REAL, max REAL);
         ''')
 
         # wait for Arduino to be ready
@@ -67,6 +67,9 @@ class Listener(Thread):
                     dbcursor.execute('''
                         INSERT INTO readings(date, sensor, value) VALUES(?,?,?)
                     ''', (datetime.now().isoformat(), point["stream"], point["value"]))
+                    dbcursor.execute('''
+                        UPDATE scales SET min = ?, max = ? WHERE sensor = ?
+                    ''', (point["scale"][0], point["scale"][1], point["stream"]))
                     db.commit()
 
                     if self.realtime:
@@ -80,7 +83,7 @@ class Listener(Thread):
         
             # wait before requesting another mesurement
             sleep(self.interval)
-        self.db.close()
+        db.close()
 
     def stop(self):
         logging.info("Listener stopping")
@@ -109,9 +112,18 @@ class Dummy_Listener(Thread):
         # Connect to the SQLite database and initialize (if necessary) a table
         db = sqlite3.connect(self.db_name)
         dbcursor = db.cursor()
-        dbcursor.execute('''
-            CREATE TABLE IF NOT EXISTS readings(date TIMESTAMP, sensor TEXT, value REAL)
+        dbcursor.executescript('''
+            CREATE TABLE IF NOT EXISTS readings(date TIMESTAMP, sensor TEXT, value REAL);
+            CREATE TABLE IF NOT EXISTS scales(sensor TEXT, min REAL, max REAL);
         ''')
+
+        dbcursor.execute('''
+            INSERT INTO scales(sensor, min, max) VALUES(?,?,?)
+        ''', ("sine wave", -1, 1))
+        dbcursor.execute('''
+            INSERT INTO scales(sensor, min, max) VALUES(?,?,?)
+        ''', ("cosine wave", -100, 120))
+
 
         i = 0
         # MAIN LOOP: generate dummy points
@@ -119,7 +131,7 @@ class Dummy_Listener(Thread):
             # add each new point to the sql db and the queue
             new_points = [
                 {"stream": "sine wave", "timestamp": datetime.now().isoformat(), "value": sin(i)},
-                {"stream": "cosine wave", "timestamp": datetime.now().isoformat(), "value": cos(i)}
+                {"stream": "cosine wave", "timestamp": datetime.now().isoformat(), "value": 100*cos(i)}
             ]
             for point in new_points:
                 dbcursor.execute('''
@@ -156,7 +168,7 @@ def test_listener(device="/dev/ttyACM0", baudrate=9600):
     q = Queue()
 
     # create and launch listener thread
-    main_listener = Listener(q, device, baudrate)
+    main_listener = Listener(q, device, baudrate, ":memory:")
     main_listener.start()
     try:
         # set a limit to how long we want the listener to run

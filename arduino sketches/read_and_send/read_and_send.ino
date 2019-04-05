@@ -1,96 +1,112 @@
 // Different states the Arduino can be in
 #define WAIT_FOR_CONNECTION 0
-#define CONNECTION_ACTIVE   1
+#define CONNECTION_ACTIVE 1
 
 // Bytes the Arduino will recognise over serial connection and react to
-#define HANDSHAKE_BYTE      0x41
-#define CLOSE_BYTE          0x00
+#define HANDSHAKE_BYTE 0x41
+#define CLOSE_BYTE 0x00
 
 //PINS
-const int luxPin = A0;
-const int tempPin = A1;
-const int humidAirPin = A2;
-const int analogOutPin = 13; // Analog output pin that the LED is attached to
+#define LUX_PIN A0
+#define TEMP_PIN A1
+#define AIR_HUMID_PIN A2
+#define LED_PIN 13 // Analog output pin that the LED is attached to
+#define GND_HUMID_PIN_IN 4
+// Ground humidity sensor sensor need two output pins
+// (+5V flips between them to avoid soil electrolysis)
+#define GND_HUMID_PIN_OUT1 6
+#define GND_HUMID_PIN_OUT2 5
+#define FLIPTIMER 200 // How long to wait befor flipping voltage on pins
 
-//ANALOG READED VALUES
-int luxValue = 0;
-int tempValue = 0;
-int humidAirValue = 0;
-int humidAir = 0;
-int temp = 0;        // value output to the PWM (analog out)
-
-
-// GLOBAL VARIABLES
-float i = 0;       // varible for generating the sine wave
-float n = 0.1;     // increment of i per iteration of the loop()
-int inByte;        // buffer for reading bytes over serial
+//ANALOG READ VALUES
+int lux_val_raw = 0;
+int air_temp_raw = 0;
+int air_humid_raw = 0;
+int ground_humid_raw = 0;
+int air_humid = 0;
+char gnd_humid = 0;
+int air_temp = 0; // value output to the PWM (analog out)
+int inByte; // buffer for reading bytes over serial
 int currentState = WAIT_FOR_CONNECTION; // default state
 
-// Gathering values on analog pins and transmitting the collected
+// Gathers values on analog pins and transmitting the collected
 // data over serial.
 void readDataAndSend() {
-
-  // values reading
-  luxValue = analogRead(luxPin);
-  tempValue = analogRead(tempPin);
-  humidAirValue = analogRead(humidAirPin);
+  // Take mesurments
+  lux_val_raw = analogRead(LUX_PIN);
+  air_temp_raw = analogRead(TEMP_PIN);
+  air_humid_raw = analogRead(AIR_HUMID_PIN);
+  ground_humid_raw  = read_ground_sensor();
 
   // mapping values to standard units
-  temp = map(tempValue, 0, 1023, -20, 80);
-  humidAir = map_humidity(humidAirValue, temp);
-
+  air_temp = map(air_temp_raw, 0, 1023, -20, 80);
+  air_humid = map_air_humidity(air_humid_raw, air_temp);
+  gnd_humid = map_gnd_humidity(ground_humid_raw);
 
   Serial.print("[");
 
-  Serial.print("{\"Lumiere ambiante\":\"luxValue\",\"value\":");
-  Serial.print(luxValue, DEC);
-  Serial.print("}");
+  Serial.print("{\"stream\":\"Luminosite ambiante\", \"value\":");
+  Serial.print(lux_val_raw, DEC);
+  Serial.print(", \"scale\":[0,100]},");
 
-  Serial.print("{\"Temperature ambiante\":\"temp\",\"value\":");
-  Serial.print(temp, DEC);
-  //Serial.print(" *C");
-  Serial.print("}");
+  Serial.print("{\"stream\":\"Temperature ambiante\", \"value\":");
+  Serial.print(air_temp, DEC);
+  Serial.print(", \"scale\":[-20,80]},");
 
-  Serial.print("{\"Humidite de l'air\":\"humidAir\",\"value\":");
-  Serial.print(humidAir, DEC);
-  Serial.print("}");
+  Serial.print("{\"stream\":\"Humidite ambiante\", \"value\":");
+  Serial.print(air_humid, DEC);
+  Serial.print(", \"scale\":[0,100]},");
 
-  Serial.print("{\"Humidite de la terre\":\"luxValue\",\"value\": 42");
-  //print humid dirt
-  Serial.print("}");
+  Serial.print("{\"stream\":\"Humidite du sol\", \"value\":");
+  Serial.print(gnd_humid, DEC);
+  Serial.print(", \"scale\":[0,4]}");
 
   
   Serial.print("]\n");
   
 }
 
-float map_humidity(int humidity, int temp) {
+float map_air_humidity(int humidity, int air_temp) {
   float r_cap = ((float)humidity * 5 / 1023) * 1200000 / (5 - ((float)humidity * 5 / 1023));
   float res;
-  if (temp < 5) {
+  if (air_temp < 5) {
     res = 155 - 7.87 * log(r_cap);
-  } else if (temp >= 5 && temp < 10) {
+  } else if (air_temp >= 5 && air_temp < 10) {
     res = 149 - 7.59 * log(r_cap);
-  } else if (temp >= 10 && temp < 15) {
+  } else if (air_temp >= 10 && air_temp < 15) {
     res = 149 - 7.74 * log(r_cap);
-  } else if (temp >= 15 && temp < 20) {
+  } else if (air_temp >= 15 && air_temp < 20) {
     res = 148 - 7.75 * log(r_cap);
-  } else if (temp >= 20 && temp < 25) {
+  } else if (air_temp >= 20 && air_temp < 25) {
     res = 149 - 8 * log(r_cap);
-  } else if (temp >= 25 && temp < 30) {
+  } else if (air_temp >= 25 && air_temp < 30) {
     res = 148 - 8.16 * log(r_cap);
-  } else if (temp >= 30 && temp < 35) {
+  } else if (air_temp >= 30 && air_temp < 35) {
     res = 148 - 8.26 * log(r_cap);
-  } else if (temp >= 35 && temp < 40) {
+  } else if (air_temp >= 35 && air_temp < 40) {
     res = 148 - 8.41 * log(r_cap);
-  } else if (temp >= 40 && temp < 45) {
+  } else if (air_temp >= 40 && air_temp < 45) {
     res = 149 - 8.68 * log(r_cap);
-  } else if (temp >= 45 && temp < 50) {
+  } else if (air_temp >= 45 && air_temp < 50) {
     res = 149 - 8.77 * log(r_cap);
-  } else if (temp >= 50) {
+  } else if (air_temp >= 50) {
     res = 147 - 8.79 * log(r_cap);
   }
   return res;
+}
+
+char map_gnd_humidity(int ground_humid_raw) {
+  if (ground_humid_raw >= 50 && ground_humid_raw < 175) {
+    // Sec
+    return 0;
+  } else if (ground_humid_raw >= 175 && ground_humid_raw < 250) {
+    // Moyen
+    return 1;
+  } else if (ground_humid_raw >= 250 && ground_humid_raw < 260) {
+    // Humide
+    return 2;  
+  }
+  return -1; // Y'a un souci quelquepart
 }
 
 // Transmits HANDSHAKE_BYTEs over serial, awaiting to receive one back.
@@ -119,6 +135,31 @@ int handleByte() {
     return WAIT_FOR_CONNECTION;
   }
   // option to add other commands in else statements
+  return WAIT_FOR_CONNECTION;
+}
+
+int read_ground_sensor() {
+  // Take 1st reading
+  setSensorPolarity(true);
+  delay(FLIPTIMER);
+  float val1 = analogRead(GND_HUMID_PIN_IN);
+  delay(FLIPTIMER);
+  
+  // Take 2nd reading
+  setSensorPolarity(false);
+  delay(FLIPTIMER);
+  float val2 = 1023 - analogRead(GND_HUMID_PIN_IN);
+  return (int) (val1 + val2) / 2;
+}
+
+void setSensorPolarity(boolean flip){
+  if(flip){
+    digitalWrite(GND_HUMID_PIN_OUT1, HIGH);
+    digitalWrite(GND_HUMID_PIN_OUT2, LOW);
+  }else{
+    digitalWrite(GND_HUMID_PIN_OUT1, LOW);
+    digitalWrite(GND_HUMID_PIN_OUT2, HIGH);
+  }
 }
 
 // SETUP FUNCTION

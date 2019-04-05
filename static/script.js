@@ -15,7 +15,7 @@ function random_colour() {
     }
 }
 
-function add_points_to_charts(points, period) {
+function add_points_to_charts(points, scales) {
     for (let point of points) {
         // Check if new data is from a know stream
         // if not, add new stream to page
@@ -52,13 +52,6 @@ function add_points_to_charts(points, period) {
                                     display: true,
                                     labelString: 'Date'
                                 }
-                            }],
-                            yAxes: [{
-                                display: true,
-                                scaleLabel: {
-                                    display: true,
-                                    labelString: 'value'
-                                }
                             }]
                         }
                     }
@@ -77,6 +70,20 @@ function add_points_to_charts(points, period) {
             x: new Date(point.timestamp),
             y: point.value
         });
+
+        // Find point scale
+        console.log("scales:", scales);
+        for (let obj of scales) {
+            if (obj.stream == point.stream) {
+                // Set chart scale
+                chart.options.scales.yAxes = [{
+                    ticks: {
+                        min: obj.min,
+                        max: obj.max
+                    }
+                }];
+            }
+        }
         // limit chart length
         if (chart.data.datasets[0].data.length > 50) {
             chart.data.datasets[0].data.shift();
@@ -88,7 +95,6 @@ function add_points_to_charts(points, period) {
 
 function request_data(period) {
     console.log(period);
-
     if (period == "realtime") {
         // clear existing charts
         charts = []
@@ -98,7 +104,7 @@ function request_data(period) {
         // Register event handler for server sent data.
         eventSource.onmessage = function(e) {
             msg = JSON.parse(e.data.replace(/'/g, '"'))
-            add_points_to_charts(msg);
+            add_points_to_charts(msg.data, msg.scales);
         }
 
     } else {
@@ -109,6 +115,7 @@ function request_data(period) {
                 eventSource.close();
                 // Get new points
                 points = JSON.parse(this.responseText);
+                console.log(points);
                 // clear existing charts
                 $("main").html("");
                 charts = []
