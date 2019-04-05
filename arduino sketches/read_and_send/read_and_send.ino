@@ -17,6 +17,7 @@
 #define GND_HUMID_PIN_OUT1 6
 #define GND_HUMID_PIN_OUT2 5
 #define FLIPTIMER 200 // How long to wait befor flipping voltage on pins
+#define WATER_PUMP 2
 
 //ANALOG READ VALUES
 int lux_val_raw = 0;
@@ -28,6 +29,11 @@ char gnd_humid = 0;
 int air_temp = 0; // value output to the PWM (analog out)
 int inByte; // buffer for reading bytes over serial
 int currentState = WAIT_FOR_CONNECTION; // default state
+
+//Watering timers
+unsigned long previousWatering = millis()-1000*60*10+10000; // last watering 10 mins ago minus 10 sec
+const long wateringDelay = 5*60000; // 5 min
+bool wateringStatus=0;
 
 // Gathers values on analog pins and transmitting the collected
 // data over serial.
@@ -62,7 +68,20 @@ void readDataAndSend() {
   Serial.print(", \"scale\":[0,4]}");
 
   
-  Serial.print("]\n");
+  Serial.print("]\n"); 
+}
+
+void considerWater() {
+  unsigned long timeSinceWatering = millis() - previousWatering;
+  if (timeSinceWatering > wateringDelay && !wateringStatus && true) { // true have to be replaces by the dryness of water
+    wateringStatus = true;
+    digitalWrite(WATER_PUMP, HIGH);
+    previousWatering = millis();
+  }
+  else if (wateringStatus && timeSinceWatering > 1*1000) {
+    wateringStatus = false;
+    digitalWrite(WATER_PUMP, LOW);
+  }
   
 }
 
@@ -187,6 +206,7 @@ void loop() {
 
       // function that read on pins, map and send the data
       readDataAndSend();
+      considerWater();
       break;
   }
   // Force an interval between loops. We don't need mesurements every ms...
