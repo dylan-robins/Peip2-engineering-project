@@ -11,7 +11,7 @@
 #define TEMP_PIN A1
 #define AIR_HUMID_PIN A2
 #define LED_PIN 13 // Analog output pin that the LED is attached to
-#define GND_HUMID_PIN_IN 4
+#define GND_HUMID_PIN_IN A4
 // Ground humidity sensor sensor need two output pins
 // (+5V flips between them to avoid soil electrolysis)
 #define GND_HUMID_PIN_OUT2 5
@@ -31,9 +31,10 @@ int inByte; // buffer for reading bytes over serial
 int currentState = WAIT_FOR_CONNECTION; // default state
 
 //Watering timers
-unsigned long previousWatering = millis()-1000*60*10+10000; // last watering 10 mins ago minus 10 sec
-const long wateringDelay = 5*60000; // 5 min
+long previousWatering = millis(); // last watering 10 mins ago minus 10 sec
+const long wateringDelay = 20*1000; // 5 min
 bool wateringStatus=0;
+
 
 // Gathers values on analog pins and transmitting the collected
 // data over serial.
@@ -64,7 +65,7 @@ void readDataAndSend() {
   Serial.print(", \"scale\":[0,100]},");
 
   Serial.print("{\"stream\":\"Humidite du sol\", \"value\":");
-  Serial.print(gnd_humid, DEC);
+  Serial.print(ground_humid_raw, DEC);
   Serial.print(", \"scale\":[0,4]}");
 
   
@@ -72,8 +73,8 @@ void readDataAndSend() {
 }
 
 void considerWater() {
-  unsigned long timeSinceWatering = millis() - previousWatering;
-  if (timeSinceWatering > wateringDelay && !wateringStatus && true) { // true have to be replaces by the dryness of water
+  long timeSinceWatering = millis() - previousWatering;
+  if (timeSinceWatering > wateringDelay && !wateringStatus && true) { // replace true by soil humidity < 1
     wateringStatus = true;
     digitalWrite(WATER_PUMP, HIGH);
     previousWatering = millis();
@@ -206,9 +207,12 @@ void loop() {
 
       // function that read on pins, map and send the data
       readDataAndSend();
-      considerWater();
+      //digitalWrite(WATER_PUMP, HIGH);
       break;
   }
+
+  considerWater();
+  digitalWrite(LED_PIN, wateringStatus);
   // Force an interval between loops. We don't need mesurements every ms...
   delay(1000);
 
