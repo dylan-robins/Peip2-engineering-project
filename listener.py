@@ -3,7 +3,7 @@ import logging
 from math import floor, sin, cos
 from time import sleep
 from datetime import datetime, timedelta
-from json import loads as json_loads
+import json
 from sys import argv, stderr
 from threading import Thread
 from queue import Queue
@@ -39,7 +39,7 @@ class Listener(Thread):
         dbcursor = db.cursor()
         dbcursor.executescript('''
             CREATE TABLE IF NOT EXISTS readings(date TIMESTAMP, sensor TEXT, value REAL);
-            CREATE TABLE IF NOT EXISTS scales(sensor TEXT, min REAL, max REAL);
+            CREATE TABLE IF NOT EXISTS scales(sensor TEXT, min REAL, max REAL, UNIQUE(sensor));
         ''')
 
         # wait for Arduino to be ready
@@ -60,7 +60,11 @@ class Listener(Thread):
                 logging.debug("Line received")
 
                 # Convert the line to an array
-                new_points = json_loads(raw_line)
+                try:
+                    new_points = json.loads(raw_line)
+                except json.decoder.JSONDecodeError:
+                    logging.warning("Invalid line received!")
+                    continue
 
                 # add each new point to the sql db and the queue
                 for point in new_points:
@@ -68,7 +72,7 @@ class Listener(Thread):
                         INSERT INTO readings(date, sensor, value) VALUES(?,?,?)
                     ''', (datetime.now().isoformat(), point["stream"], point["value"]))
                     dbcursor.execute('''
-                        UPDATE scales SET min = ?, max = ? WHERE sensor = ?
+                        UPDATE scales SET min = ?, max = ? WHERE sensor = ?;
                     ''', (point["scale"][0], point["scale"][1], point["stream"]))
                     db.commit()
 
@@ -118,10 +122,10 @@ class Dummy_Listener(Thread):
         ''')
 
         dbcursor.execute('''
-            INSERT INTO scales(sensor, min, max) VALUES(?,?,?)
+            UPDATE scales SET min = ?, max = ? WHERE sensor = ?;
         ''', ("sine wave", -1, 1))
         dbcursor.execute('''
-            INSERT INTO scales(sensor, min, max) VALUES(?,?,?)
+            UPDATE scales SET min = ?, max = ? WHERE sensor = ?;
         ''', ("cosine wave", -100, 120))
 
 

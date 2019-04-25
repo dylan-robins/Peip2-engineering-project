@@ -1,3 +1,8 @@
+// Event source object
+let eventSource;
+// Array of charts
+let charts = [];
+
 function obj_in_array(array, obj_name) {
     for (let object of array) {
         if (object.name == obj_name) {
@@ -15,7 +20,7 @@ function random_colour() {
     }
 }
 
-function add_points_to_charts(points, scales) {
+function add_points_to_charts(points, scales, timeframe) {
     for (let point of points) {
         // Check if new data is from a know stream
         // if not, add new stream to page
@@ -72,16 +77,38 @@ function add_points_to_charts(points, scales) {
         });
 
         // Find point scale
-        console.log("scales:", scales);
         for (let obj of scales) {
             if (obj.stream == point.stream) {
-                // Set chart scale
+                // Set y axis scale
                 chart.options.scales.yAxes = [{
                     ticks: {
                         min: obj.min,
                         max: obj.max
                     }
                 }];
+                // calculate x axis scale
+                let x_min; // date at start of axis
+                let x_max = Date.now() // date at end of axis
+                switch (timeframe) {
+                    case "day":
+                        x_min = new Date(Date.now() - 1000*60*60*24);
+                        break;
+                    case "week":
+                        x_min = new Date(Date.now() - 1000*60*60*24*7);
+                        break;
+                    case "month":
+                        x_min = new Date(Date.now() - 1000*60*60*24*30);
+                        break;
+                    case "year":
+                        x_min = new Date(Date.now() - 1000*60*60*24*365);
+                        break;
+                }
+                if (timeframe != "realtime") {
+                    chart.options.scales.xAxes[0].time = {
+                        min: x_min,
+                        max: x_max
+                    }
+                }
             }
         }
         // limit chart length
@@ -95,6 +122,7 @@ function add_points_to_charts(points, scales) {
 
 function request_data(period) {
     console.log(period);
+    // Request realtime points
     if (period == "realtime") {
         // clear existing charts
         charts = []
@@ -106,7 +134,7 @@ function request_data(period) {
             msg = JSON.parse(e.data.replace(/'/g, '"'))
             add_points_to_charts(msg.data, msg.scales);
         }
-
+    // Request historical points from a fixed timeframe
     } else {
         let req = new XMLHttpRequest();
         req.onreadystatechange = function() {
@@ -114,13 +142,13 @@ function request_data(period) {
                 // close realtime data stream
                 eventSource.close();
                 // Get new points
-                points = JSON.parse(this.responseText);
-                console.log(points);
+                msg = JSON.parse(this.responseText);
+                console.log(msg);
                 // clear existing charts
                 $("main").html("");
                 charts = []
                 // Draw data
-                add_points_to_charts(points, period);
+                add_points_to_charts(msg.data, msg.scales, period);
             } else if (this.readyState == 4) {
                 console.log("Unable to fetch data... Error ", this.status);
             }
@@ -131,10 +159,5 @@ function request_data(period) {
     }
 }
 
-
-// Array of charts
-let charts = [];
-
 // Connect to the server
-let eventSource;
 request_data("realtime");

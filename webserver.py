@@ -16,7 +16,7 @@ from listener import Listener, Dummy_Listener
 from find_arduino import find_arduino
 
 ########## CONSTANTS ##########
-DBNAME = "data.sqlite3"
+DBNAME = "test_data_2.sqlite3"
 ###############################
 
 # initialize loggers
@@ -111,8 +111,7 @@ def stream():
         # connect to database
         db = sqlite3.connect(
             'file:'+DBNAME+'?mode=ro',
-            uri=True,
-            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES
+            uri=True
         )
         dbcursor = db.cursor()
         name = request.form["name"]
@@ -136,18 +135,27 @@ def stream():
         else:
             abort(400)
         # Get requested points from database and return them
-        requested = [
-            {
-                "timestamp" : point[0],
-                "stream" : point[1],
-                "value" : point[2]
-            } for point in dbcursor.execute('''
-                SELECT datetime(date), sensor, value
-                FROM readings
-                WHERE date > datetime(?)
-                GROUP BY strftime('%s', DATE(date) || ' ' || TIME(date)) / (?), sensor;
-            ''', (requested_date, interval))
-        ]
+        requested = {
+            "data": [
+                {
+                    "timestamp" : point[0],
+                    "stream" : point[1],
+                    "value" : point[2]
+                } for point in dbcursor.execute('''
+                    SELECT date, sensor, avg(value)
+                    FROM readings
+                    WHERE date > ?
+                    GROUP BY strftime("%s", date)/?, sensor;
+                ''', (requested_date, interval))
+            ],
+            "scales": [
+                {
+                    "stream": row[0],
+                    "min" : row[1],
+                    "max" : row[2]
+                } for row in dbcursor.execute('SELECT sensor, min, max FROM scales')
+            ]
+        }
         db.close()
         return jsonify(requested)
     else:
