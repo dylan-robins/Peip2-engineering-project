@@ -10,12 +10,8 @@
 #define LUX_PIN A0
 #define TEMP_PIN A1
 #define AIR_HUMID_PIN A2
+#define GND_HUMID_PIN A4
 #define LED_PIN 13 // Analog output pin that the LED is attached to
-#define GND_HUMID_PIN_IN 4
-// Ground humidity sensor sensor need two output pins
-// (+5V flips between them to avoid soil electrolysis)
-#define GND_HUMID_PIN_OUT1 6
-#define GND_HUMID_PIN_OUT2 5
 #define FLIPTIMER 200 // How long to wait befor flipping voltage on pins
 
 //ANALOG READ VALUES
@@ -29,6 +25,7 @@ int air_temp = 0; // value output to the PWM (analog out)
 int inByte; // buffer for reading bytes over serial
 int currentState = WAIT_FOR_CONNECTION; // default state
 
+
 // Gathers values on analog pins and transmitting the collected
 // data over serial.
 void readDataAndSend() {
@@ -36,39 +33,43 @@ void readDataAndSend() {
   lux_val_raw = analogRead(LUX_PIN);
   air_temp_raw = analogRead(TEMP_PIN);
   air_humid_raw = analogRead(AIR_HUMID_PIN);
-  ground_humid_raw  = read_ground_sensor();
+  ground_humid_raw  = analogRead(GND_HUMID_PIN);
 
   // mapping values to standard units
   air_temp = map(air_temp_raw, 0, 1023, -20, 80);
   air_humid = map_air_humidity(air_humid_raw, air_temp);
-  gnd_humid = map_gnd_humidity(ground_humid_raw);
-
+  gnd_humid = map(ground_humid_raw, 150, 800, 0, 10); 
   Serial.print("[");
 
   Serial.print("{\"stream\":\"Luminosite ambiante\", \"value\":");
   Serial.print(lux_val_raw, DEC);
   Serial.print(", \"scale\":[0,100]},");
+  delay(20);
 
   Serial.print("{\"stream\":\"Temperature ambiante\", \"value\":");
   Serial.print(air_temp, DEC);
   Serial.print(", \"scale\":[-20,80]},");
+  delay(20);
 
   Serial.print("{\"stream\":\"Humidite ambiante\", \"value\":");
   Serial.print(air_humid, DEC);
   Serial.print(", \"scale\":[0,100]},");
+  delay(20);
 
   Serial.print("{\"stream\":\"Humidite du sol\", \"value\":");
   Serial.print(gnd_humid, DEC);
-  Serial.print(", \"scale\":[0,4]}");
+  Serial.print(", \"scale\":[0,10]}");
 
   
   Serial.print("]\n");
+  delay(100);
   
 }
 
+
 float map_air_humidity(int humidity, int air_temp) {
   float r_cap = ((float)humidity * 5 / 1023) * 1200000 / (5 - ((float)humidity * 5 / 1023));
-  float res;
+  float res = 0;
   if (air_temp < 5) {
     res = 155 - 7.87 * log(r_cap);
   } else if (air_temp >= 5 && air_temp < 10) {
@@ -95,19 +96,6 @@ float map_air_humidity(int humidity, int air_temp) {
   return res;
 }
 
-char map_gnd_humidity(int ground_humid_raw) {
-  if (ground_humid_raw >= 50 && ground_humid_raw < 175) {
-    // Sec
-    return 0;
-  } else if (ground_humid_raw >= 175 && ground_humid_raw < 250) {
-    // Moyen
-    return 1;
-  } else if (ground_humid_raw >= 250 && ground_humid_raw < 260) {
-    // Humide
-    return 2;  
-  }
-  return -1; // Y'a un souci quelquepart
-}
 
 // Transmits HANDSHAKE_BYTEs over serial, awaiting to receive one back.
 // Once received, switches Arduino to CONNECTION_ACTIVE state
@@ -121,6 +109,7 @@ int probeForPeer() {
     return WAIT_FOR_CONNECTION;
   }
 }
+
 
 // Determines what to do with data received over serial connection while in
 // CONNECTION_ACTIVE state.
@@ -138,29 +127,6 @@ int handleByte() {
   return WAIT_FOR_CONNECTION;
 }
 
-int read_ground_sensor() {
-  // Take 1st reading
-  setSensorPolarity(true);
-  delay(FLIPTIMER);
-  float val1 = analogRead(GND_HUMID_PIN_IN);
-  delay(FLIPTIMER);
-  
-  // Take 2nd reading
-  setSensorPolarity(false);
-  delay(FLIPTIMER);
-  float val2 = 1023 - analogRead(GND_HUMID_PIN_IN);
-  return (int) (val1 + val2) / 2;
-}
-
-void setSensorPolarity(boolean flip){
-  if(flip){
-    digitalWrite(GND_HUMID_PIN_OUT1, HIGH);
-    digitalWrite(GND_HUMID_PIN_OUT2, LOW);
-  }else{
-    digitalWrite(GND_HUMID_PIN_OUT1, LOW);
-    digitalWrite(GND_HUMID_PIN_OUT2, HIGH);
-  }
-}
 
 // SETUP FUNCTION
 // Runs once at boot
