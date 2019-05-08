@@ -64,26 +64,31 @@ class Listener(Thread):
                     new_points = json.loads(raw_line)
                 except json.decoder.JSONDecodeError:
                     logging.warning("Invalid line received!")
+                    logging.warning("<{}> is not valid.".format(raw_line))
                     continue
 
                 # add each new point to the sql db and the queue
                 for point in new_points:
-                    dbcursor.execute('''
-                        INSERT INTO readings(date, sensor, value) VALUES(?,?,?)
-                    ''', (datetime.now().isoformat(), point["stream"], point["value"]))
-                    dbcursor.execute('''
-                        UPDATE scales SET min = ?, max = ? WHERE sensor = ?;
-                    ''', (point["scale"][0], point["scale"][1], point["stream"]))
-                    db.commit()
+                    try:
+                        dbcursor.execute('''
+                            INSERT INTO readings(date, sensor, value) VALUES(?,?,?)
+                        ''', (datetime.now().isoformat(), point["stream"], point["value"]))
+                        dbcursor.execute('''
+                            REPLACE INTO scales(sensor, min, max) VALUES(?, ?, ?);
+                        ''', (point["stream"], point["scale"][0], point["scale"][1]))
+                        db.commit()
 
-                    if self.realtime:
-                        # add each new point to the queue
-                        logging.debug("Point added to queue")
-                        self.queue.put({
-                            "stream": point["stream"],
-                            "timestamp": datetime.now().isoformat(),
-                            "value": point["value"]
-                        })
+                        if self.realtime:
+                            # add each new point to the queue
+                            logging.debug("Point added to queue")
+                            self.queue.put({
+                                "stream": point["stream"],
+                                "timestamp": datetime.now().isoformat(),
+                                "value": point["value"]
+                            })
+                    except KeyError:
+                        logging.warning("Malformed line received!")
+                        logging.warning("<{}> is not valid.".format(point))
         
             # wait before requesting another mesurement
             sleep(self.interval)
@@ -122,10 +127,10 @@ class Dummy_Listener(Thread):
         ''')
 
         dbcursor.execute('''
-            UPDATE scales SET min = ?, max = ? WHERE sensor = ?;
+            REPLACE INTO scales(sensor, min, max) VALUES(?, ?, ?);
         ''', ("sine wave", -1, 1))
         dbcursor.execute('''
-            UPDATE scales SET min = ?, max = ? WHERE sensor = ?;
+            REPLACE INTO scales(sensor, min, max) VALUES(?, ?, ?);
         ''', ("cosine wave", -100, 120))
 
 

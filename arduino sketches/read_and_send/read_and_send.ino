@@ -7,23 +7,30 @@
 #define CLOSE_BYTE 0x00
 
 //PINS
-#define LUX_PIN A0
-#define TEMP_PIN A1
-#define AIR_HUMID_PIN A2
-#define GND_HUMID_PIN A4
-#define LED_PIN 13 // Analog output pin that the LED is attached to
-#define FLIPTIMER 200 // How long to wait befor flipping voltage on pins
+#define LUX_PIN A0       // input: photodiode
+#define TEMP_PIN A1      // input: temperature sensor
+#define AIR_HUMID_PIN A2 // input: air humidity sensor
+#define GND_HUMID_PIN A4 // input: ground conductivity sensor
+#define LED_PIN 13       // output: Analog output pin that the LED is attached to
+#define PUMP_PIN 2       // output: water pump
 
 //ANALOG READ VALUES
 int lux_val_raw = 0;
 int air_temp_raw = 0;
 int air_humid_raw = 0;
 int ground_humid_raw = 0;
+char lux_val = 0;
 int air_humid = 0;
 char gnd_humid = 0;
 int air_temp = 0; // value output to the PWM (analog out)
 int inByte; // buffer for reading bytes over serial
 int currentState = WAIT_FOR_CONNECTION; // default state
+
+// WATERING TIMERS
+#define TIME_BETWEEN_SQUIRTS 60000 // 60000 ms = 1 min
+#define SQUIRT_DURATION 1000           // 1000 ms = 1 sec
+unsigned long previousWatering; // time when we last turned on the pump
+bool wateringStatus=0; // Are we pumping water right now?
 
 
 // Gathers values on analog pins and transmitting the collected
@@ -36,37 +43,48 @@ void readDataAndSend() {
   ground_humid_raw  = analogRead(GND_HUMID_PIN);
 
   // mapping values to standard units
+  lux_val = map(lux_val_raw, 0, 1023, 0, 100);
   air_temp = map(air_temp_raw, 0, 1023, -20, 80);
   air_humid = map_air_humidity(air_humid_raw, air_temp);
-  gnd_humid = map(ground_humid_raw, 150, 800, 0, 10); 
-  Serial.print("[");
+  gnd_humid = map(ground_humid_raw, 150, 800, 0, 10);
 
-  Serial.print("{\"stream\":\"Luminosite ambiante\", \"value\":");
-  Serial.print(lux_val_raw, DEC);
-  Serial.print(", \"scale\":[0,100]},");
-  delay(20);
+  // Print readings to serial output
+  Serial.print(F("["));
+  delay(5);
 
-  Serial.print("{\"stream\":\"Temperature ambiante\", \"value\":");
+  Serial.print(F("{\"stream\":\"Luminosite ambiante\", \"value\":"));
+  delay(5);
+  Serial.print(lux_val, DEC);
+  delay(5);
+  Serial.print(F(", \"scale\":[0,100]},"));
+  delay(5);
+
+  Serial.print(F("{\"stream\":\"Temperature ambiante\", \"value\":"));
+  delay(5);
   Serial.print(air_temp, DEC);
-  Serial.print(", \"scale\":[-20,80]},");
-  delay(20);
+  delay(5);
+  Serial.print(F(", \"scale\":[-20,80]},"));
+  delay(5);
 
-  Serial.print("{\"stream\":\"Humidite ambiante\", \"value\":");
+  Serial.print(F("{\"stream\":\"Humidite ambiante\", \"value\":"));
+  delay(5);
   Serial.print(air_humid, DEC);
-  Serial.print(", \"scale\":[0,100]},");
-  delay(20);
+  delay(5);
+  Serial.print(F(", \"scale\":[0,100]},"));
+  delay(5);
 
-  Serial.print("{\"stream\":\"Humidite du sol\", \"value\":");
+  Serial.print(F("{\"stream\":\"Humidite du sol\", \"value\":"));
+  delay(5);
   Serial.print(gnd_humid, DEC);
-  Serial.print(", \"scale\":[0,10]}");
-
+  delay(5);
+  Serial.print(F(", \"scale\":[0,10]}"));
+  delay(5);
   
-  Serial.print("]\n");
-  delay(100);
+  Serial.print(F("]\n"));
   
 }
 
-
+// Maps the air humidity sensor value to something usable
 float map_air_humidity(int humidity, int air_temp) {
   float r_cap = ((float)humidity * 5 / 1023) * 1200000 / (5 - ((float)humidity * 5 / 1023));
   float res = 0;
@@ -97,7 +115,27 @@ float map_air_humidity(int humidity, int air_temp) {
 }
 
 
-// Transmits HANDSHAKE_BYTEs over serial, awaiting to receive one back.
+// Check if the plant needs watering, and if it does, then turn on the pump.
+// If we're in the process of watering the plant and have been doing it long
+// enough, then stop.
+// Otherwise do nothing.
+void considerWater() {
+  long timeSinceWatering = millis() - previousWatering;
+  // replace true by soil humidity check
+  if (timeSinceWatering > TIME_BETWEEN_SQUIRTS && !wateringStatus && gnd_humid<4) {
+    wateringStatus = true;
+    digitalWrite(PUMP_PIN, HIGH);
+    previousWatering = millis();
+  }
+  else if (wateringStatus && timeSinceWatering > SQUIRT_DURATION) {
+    wateringStatus = false;
+    digitalWrite(PUMP_PIN, LOW);
+  }
+  
+}
+
+
+// Transmits HANDSHAKE_BYTEs over serial, waiting to receive one back.
 // Once received, switches Arduino to CONNECTION_ACTIVE state
 int probeForPeer() {
   Serial.write(HANDSHAKE_BYTE);
@@ -131,8 +169,19 @@ int handleByte() {
 // SETUP FUNCTION
 // Runs once at boot
 void setup() {
-  pinMode(13, OUTPUT);
+  // Setup pin modes
+  pinMode(LUX_PIN, INPUT);
+  pinMode(TEMP_PIN, INPUT);
+  pinMode(AIR_HUMID_PIN, INPUT);
+  pinMode(GND_HUMID_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(PUMP_PIN, OUTPUT);
+  // Initialize serial connection
   Serial.begin(9600);
+
+  // Assume we just watered the plant so that the arduino doesn't
+  // squirt water everytime it boots up
+  previousWatering = millis();
 }
 
 
@@ -155,6 +204,7 @@ void loop() {
       readDataAndSend();
       break;
   }
+  considerWater();
   // Force an interval between loops. We don't need mesurements every ms...
   delay(1000);
 

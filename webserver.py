@@ -1,7 +1,7 @@
 #!venv/bin/python
 import logging
 from sys import stderr, exit
-from flask import Flask, render_template, url_for, copy_current_request_context, Response, request, jsonify, abort
+from flask import Flask, render_template, url_for, copy_current_request_context, Response, request, jsonify, abort, stream_with_context
 from serial import Serial
 from queue import Queue
 from time import time, sleep
@@ -16,7 +16,7 @@ from listener import Listener, Dummy_Listener
 from find_arduino import find_arduino
 
 ########## CONSTANTS ##########
-DBNAME = "test_data_2.sqlite3"
+DBNAME = "test_data.sqlite3"
 ###############################
 
 # initialize loggers
@@ -50,64 +50,73 @@ def stream():
         '''
         Fetches all new points from queue and pushes them to client via an event stream
         '''
+        # get access to global queue
+        global q
         first_send = True
         to_send = {
             "data": [],
             "scales": []
         }
-        while True:
-            logging.debug("Building response...")
-            # get new points
-            if (first_send):
-                # connect to database
-                db = sqlite3.connect(
-                    'file:'+DBNAME+'?mode=ro',
-                    uri=True
-                )
-                dbcursor = db.cursor()
+        try:
+            while True:
+                logging.debug("Building response...")
+                # get new points
+                if (first_send):
+                    logging.info("EventStream opened")
+                    # connect to database
+                    db = sqlite3.connect(
+                        'file:'+DBNAME+'?mode=ro',
+                        uri=True,
+                        timeout=10
+                    )
+                    dbcursor = db.cursor()
 
-                # Get last 50 points for each sensor in the db + their scales
-                # Build data structure with scales
-                to_send["scales"] = [
-                    {
-                        "stream": row[0],
-                        "min" : row[1],
-                        "max" : row[2]
-                    } for row in dbcursor.execute('SELECT sensor, min, max FROM scales')
-                ]
-                # Get points from db and add them to the structure
-                for stream in to_send["scales"]:
-                    to_send["data"].extend([
+                    # Get last 50 points for each sensor in the db + their scales
+                    # Build data structure with scales
+                    to_send["scales"] = [
                         {
-                            "timestamp" : point[0],
-                            "stream" : point[1],
-                            "value" : point[2]
-                        } for point in dbcursor.execute('''
-                            SELECT * FROM (
-                                SELECT date, sensor, value
-                                FROM readings
-                                WHERE sensor == ?
-                                ORDER BY date DESC LIMIT 50
-                            ) ORDER BY date ASC;
-                        ''', (stream["stream"],))
-                ])
-                db.close()
-                first_send = False
+                            "stream": row[0],
+                            "min" : row[1],
+                            "max" : row[2]
+                        } for row in dbcursor.execute('SELECT sensor, min, max FROM scales')
+                    ]
+                    # Get points from db and add them to the structure
+                    for stream in to_send["scales"]:
+                        to_send["data"].extend([
+                            {
+                                "timestamp" : point[0],
+                                "stream" : point[1],
+                                "value" : point[2]
+                            } for point in dbcursor.execute('''
+                                SELECT * FROM (
+                                    SELECT date, sensor, value
+                                    FROM readings
+                                    WHERE sensor == ?
+                                    ORDER BY date DESC LIMIT 50
+                                ) ORDER BY date ASC;
+                            ''', (stream["stream"],))
+                    ])
+                    db.close()
+                    first_send = False
+                    serial_listener.set_realtime(True)
 
-            # Send points + new stuff in the queue
-            while not q.empty():
-                logging.debug("Adding point to queue...")
-                point = q.get()
-                to_send["data"].append(point)
-                # build data string
-            if len(to_send) > 0:
-                logging.debug(str(to_send))
-                yield 'data: {}\n\n'.format(json.dumps(to_send))
-                to_send["data"] = []
-            sleep(2)
+                # Send points + new stuff in the queue
+                while not q.empty():
+                    logging.debug("Adding point to queue...")
+                    point = q.get()
+                    to_send["data"].append(point)
+                    # build data string
+                if len(to_send) > 0:
+                    logging.debug(str(to_send))
+                    yield 'data: {}\n\n'.format(json.dumps(to_send))
+                    to_send["data"] = []
+                sleep(2)
+        except GeneratorExit:
+            serial_listener.set_realtime(False)
+            logging.info("EventStream closed.")
+
 
     if request.method == "POST":
-        serial_listener.set_realtime(False)
         # connect to database
         db = sqlite3.connect(
             'file:'+DBNAME+'?mode=ro',
@@ -159,9 +168,6 @@ def stream():
         db.close()
         return jsonify(requested)
     else:
-        # get access to global queue
-        global q
-        serial_listener.set_realtime(True)
         return Response(eventStream(), mimetype="text/event-stream")
 
 

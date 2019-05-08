@@ -2,6 +2,8 @@
 let eventSource;
 // Array of charts
 let charts = [];
+// Boolean to treat first eventSource response differently to rest
+let first_receive = true;
 
 function obj_in_array(array, obj_name) {
     for (let object of array) {
@@ -121,17 +123,26 @@ function add_points_to_charts(points, scales, timeframe) {
 }
 
 function request_data(period) {
+    // Display spinner
+    $("main").html('<div class="lds-ring"><div></div><div></div><div></div><div></div></div>');
+
     console.log(period);
+    
     // Request realtime points
     if (period == "realtime") {
-        // clear existing charts
-        charts = []
-        $("main").html("");
         // Connect to the server
         eventSource = new EventSource("/stream");
+        first_receive = true;
         // Register event handler for server sent data.
         eventSource.onmessage = function(e) {
+            if (first_receive) {
+                // clear existing charts
+                charts = []
+                $("main").html("");
+                first_receive = false;
+            }
             msg = JSON.parse(e.data.replace(/'/g, '"'))
+            console.log(msg);
             add_points_to_charts(msg.data, msg.scales);
         }
     // Request historical points from a fixed timeframe
