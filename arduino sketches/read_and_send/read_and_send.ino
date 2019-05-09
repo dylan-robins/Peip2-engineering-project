@@ -43,10 +43,10 @@ void readDataAndSend() {
   ground_humid_raw  = analogRead(GND_HUMID_PIN);
 
   // mapping values to standard units
-  lux_val = map(lux_val_raw, 0, 1023, 0, 100);
-  air_temp = map(air_temp_raw, 0, 1023, -20, 80);
-  air_humid = map_air_humidity(air_humid_raw, air_temp);
-  gnd_humid = map(ground_humid_raw, 150, 800, 0, 10);
+  lux_val = constrain(map(lux_val_raw, 0, 1023, 0, 100), 0, 100);
+  air_temp = constrain(map(air_temp_raw, 0, 1023, -20, 80), -20, 80);
+  air_humid = constrain(map_air_humidity(air_humid_raw, air_temp), 0, 100);
+  gnd_humid = constrain(map(ground_humid_raw, 150, 800, 0, 10), 0, 10);
 
   // Print readings to serial output
   Serial.print(F("["));

@@ -76,7 +76,6 @@ class Listener(Thread):
                         dbcursor.execute('''
                             REPLACE INTO scales(sensor, min, max) VALUES(?, ?, ?);
                         ''', (point["stream"], point["scale"][0], point["scale"][1]))
-                        db.commit()
 
                         if self.realtime:
                             # add each new point to the queue
@@ -89,16 +88,15 @@ class Listener(Thread):
                     except KeyError:
                         logging.warning("Malformed line received!")
                         logging.warning("<{}> is not valid.".format(point))
-        
-            # wait before requesting another mesurement
-            sleep(self.interval)
+                        continue
+                db.commit()
         db.close()
 
     def stop(self):
         logging.info("Listener stopping")
         self.stop_flag = True
         self.device.write(self.close_byte)  # Arduino will return to wait state
-        self.device.flush()
+        sleep(1)
         self.device.close()
 
     def set_realtime(self, rt):

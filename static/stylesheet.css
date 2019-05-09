@@ -15,10 +15,12 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 nav {
-    width: 100%;
+    /* width: 100%; */
+    min-width: 20em;
     font-size: 18px;
 }
 nav > a {
@@ -66,10 +68,11 @@ h2 {
     color: rgba(0,0,0, 0.87);
     background-color: #f4f4f4;
 }
-@media only screen and (max-width : 100em) {
+@media only screen and (max-width : 750px) {
     .graph {
-        width: 100vw
+        width: calc(100vw - 2em)
     }
+
 }
 
 button {

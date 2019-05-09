@@ -120,7 +120,8 @@ def stream():
         # connect to database
         db = sqlite3.connect(
             'file:'+DBNAME+'?mode=ro',
-            uri=True
+            uri=True,
+            timeout=10
         )
         dbcursor = db.cursor()
         name = request.form["name"]
